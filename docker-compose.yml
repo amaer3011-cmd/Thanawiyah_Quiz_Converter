@@ -1,0 +1,29 @@
+services:
+  bot:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    volumes:
+      - thanawiyah_data:/app/data
+      - thanawiyah_tmp:/app/tmp
+    environment:
+      DATABASE_PATH: /app/data/thanawiyah_quiz.db
+      TEMP_DIR: /app/tmp
+
+  admin:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    command: uvicorn admin_api:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - thanawiyah_data:/app/data
+      - thanawiyah_tmp:/app/tmp
+    environment:
+      DATABASE_PATH: /app/data/thanawiyah_quiz.db
+      TEMP_DIR: /app/tmp
+
+volumes:
+  thanawiyah_data:
+  thanawiyah_tmp:
