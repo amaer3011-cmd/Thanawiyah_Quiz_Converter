@@ -6,7 +6,7 @@ import re
 QUESTION_RE=re.compile(r'^\s*(?:#{1,6}\s*)?(?:(?:ال)?س(?:ؤال)?\s*)?(\d+)[\s.\-:：)\]]+(.+?)\s*$',re.I)
 QUESTION_WORD_RE=re.compile(r'^\s*(?:#{1,6}\s*)?(?:(?:ال)?س(?:ؤال)?|question|q)\s*(?:رقم\s*)?(\d+)?\s*[:：.\-)]\s*(.+?)\s*$',re.I)
 OPTION_RE=re.compile(r'^\s*(?:[-*+]\s+|(?:[أا][)\].:\-]|[بب][)\].:\-]|[جج][)\].:\-]|[دد][)\].:\-]|[A-Da-d][)\].:\-]|[1-4][)\].:\-])\s*)(.+?)\s*$')
-ANSWER_RE=re.compile(r'^\s*(?:الإجابة\s*(?:الصحيحة)?|الاجابة\s*(?:الصحيحة)?|correct\s*answer|answer)\s*(?:هي|is)?\s*[:：\-]\s*(.+?)\s*$',re.I)
+ANSWER_RE=re.compile(r'^\s*(?:الإجابة\s*(?:الصحيحة)?|الاجابة\s*(?:الصحيحة)?|correct\s*answer|answer)\s*(?:هي|is)?\s*(?:[:：\-]|\s)\s*(?:الخيار\s*|option\s*)?(.+?)\s*$',re.I)
 EXPLAIN_RE=re.compile(r'^\s*(?:التفسير|شرح\s*(?:الإجابة|الاجابة)|الشرح|explanation|explain)\s*[:：\-]\s*(.+?)\s*$',re.I)
 LETTERS={'أ':0,'ا':0,'إ':0,'آ':0,'ب':1,'ج':2,'د':3,'A':0,'B':1,'C':2,'D':3,'a':0,'b':1,'c':2,'d':3}
 
@@ -39,6 +39,8 @@ def parse_provided_quiz(text:str)->list[dict]:
     for raw in (text or '').replace('\r','').split('\n'):
         line=raw.strip()
         if not line or re.fullmatch(r'[-=*_# ]{3,}',line):continue
+        # إزالة علامات Markdown حول العناوين والخيارات دون المساس بمحتوى السؤال.
+        line=re.sub(r'^\s*>\s*','',line)
         qtext=_question(line)
         if qtext:
             if current:rows.append(current)

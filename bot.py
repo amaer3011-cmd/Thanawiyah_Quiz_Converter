@@ -57,14 +57,19 @@ async def convert_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def convert_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     doc=update.message.document; name=(doc.file_name or "").lower()
-    if not name.endswith((".txt", ".md", ".markdown")):
+    mime=(doc.mime_type or '').lower()
+    is_text_file=name.endswith((".txt", ".md", ".markdown", ".mdown")) or mime in ('text/markdown','text/plain','text/x-markdown','application/markdown')
+    if not is_text_file:
         await update.message.reply_text("❌ أرسل ملف TXT أو MD فقط، أو أرسل النص مباشرة."); return
     if doc.file_size and doc.file_size > config.MAX_FILE_SIZE:
         await update.message.reply_text("❌ الملف أكبر من الحد المسموح."); return
     source=os.path.join(config.TEMP_DIR, f"source_{uuid.uuid4().hex}")
     try:
         tg_file=await context.bot.get_file(doc.file_id); await tg_file.download_to_drive(source)
-        text=open(source, encoding="utf-8", errors="ignore").read()
+        with open(source, encoding="utf-8-sig", errors="replace") as fh:
+            text=fh.read()
+        if not text.strip():
+            raise ValueError('الملف فارغ أو لا يحتوي على نص قابل للقراءة.')
         questions=await asyncio.to_thread(parse_provided_quiz, text)
         await send_quiz(update, questions)
     except ValueError as exc:
