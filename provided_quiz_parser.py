@@ -16,6 +16,10 @@ def _question(line):
     for rx in (QUESTION_RE,QUESTION_WORD_RE):
         m=rx.match(line)
         if m: return m.group(2).strip()
+    # سؤال غير مرقم: عنوان Markdown أو سطر ينتهي بعلامة استفهام.
+    plain=re.sub(r'^#{1,6}\s*','',line).strip()
+    if plain and plain.endswith(('؟','?')) and not re.match(r'^(?:الإجابة|الاجابة|التفسير|الشرح|answer|explanation)\b',plain,re.I):
+        return plain
     return None
 
 def _option(line):
@@ -43,8 +47,10 @@ def parse_provided_quiz(text:str)->list[dict]:
         line=re.sub(r'^\s*>\s*','',line)
         qtext=_question(line)
         if qtext:
-            if current:rows.append(current)
-            current={'question':qtext,'options':[],'answer_raw':'','explanation':''};mode=None;continue
+            # لا نعتبر علامة الاستفهام داخل سطر خيار سؤالًا جديدًا.
+            if current is None or len(current.get('options',[])) >= 4 or not current.get('options'):
+                if current:rows.append(current)
+                current={'question':qtext,'options':[],'answer_raw':'','explanation':''};mode=None;continue
         if current is None:continue
         opt=_option(line)
         if opt is not None:
@@ -57,7 +63,7 @@ def parse_provided_quiz(text:str)->list[dict]:
         elif mode=='explanation':current['explanation']+=' '+_clean(line)
         elif mode=='options' and current['options']:current['options'][-1]+=' '+_clean(line)
     if current:rows.append(current)
-    if not rows:raise ValueError('لم يتم العثور على أسئلة. أرسل سؤالًا مرقمًا أو بعنوان سؤال.')
+    if not rows:raise ValueError('لم يتم العثور على أسئلة. أرسل كل سؤال في سطر مستقل، ويفضل أن ينتهي بعلامة ؟ أو ?.')
     result=[]
     for n,row in enumerate(rows,1):
         if len(row['options'])!=4:raise ValueError(f'السؤال {n} يجب أن يحتوي على 4 خيارات، وتم العثور على {len(row["options"])}.')
@@ -67,4 +73,4 @@ def parse_provided_quiz(text:str)->list[dict]:
     return result
 
 def looks_like_provided_quiz(text:str)->bool:
-    return bool(re.search(r'(?im)^\s*(?:#{1,6}\s*)?(?:(?:(?:ال)?س(?:ؤال)?|question|q)\s*)?\d+[\s.\-:：)\]]+',text or '')) or bool(re.search(r'(?im)^\s*(?:(?:ال)?س(?:ؤال)?|question|q)\s*\d*\s*[:：]',text or ''))
+    return bool(re.search(r'(?im)^\s*(?:#{1,6}\s*)?(?:(?:(?:ال)?س(?:ؤال)?|question|q)\s*)?\d+[\s.\-:：)\]]+',text or '')) or bool(re.search(r'(?im)^\s*(?:(?:ال)?س(?:ؤال)?|question|q)\s*\d*\s*[:：]',text or '')) or bool(re.search(r'(?m)^\s*(?:#{1,6}\s*)?[^\n]{4,}[؟?]\s*$',text or ''))
