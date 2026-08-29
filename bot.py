@@ -38,7 +38,20 @@ def remove(path):
     try: os.remove(path)
     except OSError: pass
 
-async def send_quiz(update, questions):
+def progress_bar(percent: int) -> str:
+    filled=max(0,min(10,percent//10))
+    return '▓'*filled + '░'*(10-filled)
+
+async def update_progress(message, percent: int, stage: str):
+    try:
+        await message.edit_text(f"⏳ جاري تجهيز الكويز... {percent}%\n[{progress_bar(percent)}]\n\n{stage}")
+    except Exception:
+        # فشل تعديل رسالة التقدم لا يوقف التحويل.
+        pass
+
+async def send_quiz(update, questions, status=None):
+    if status:
+        await update_progress(status, 85, '✅ تم تنظيم الأسئلة والإجابات\n🎨 جاري بناء ملف HTML بنفس التصميم...')
     path=await asyncio.to_thread(build_file, questions)
     try:
         with open(path, "rb") as f:
@@ -46,14 +59,18 @@ async def send_quiz(update, questions):
     finally: remove(path)
 
 async def convert_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    status=await update.message.reply_text(f"⏳ جاري تجهيز الكويز... 10%\n[{progress_bar(10)}]\n\n📥 تم استلام النص\n🧠 جاري فهم بنية المحتوى العلمي...")
     try:
+        await update_progress(status, 35, '🧠 جاري قراءة المحتوى وفصل العناوين عن الأسئلة...')
         questions=await asyncio.to_thread(parse_provided_quiz, (update.message.text or "").strip())
-        await send_quiz(update, questions)
+        await update_progress(status, 65, f'🔎 تم العثور على {len(questions)} سؤالًا\n🧩 جاري ترتيب الخيارات وربط الإجابات بالتفسيرات...')
+        await send_quiz(update, questions, status=status)
+        await status.delete()
     except ValueError as exc:
-        await update.message.reply_text(f"❌ لم أستطع قراءة الأسئلة:\n{exc}\n\nاستخدم /help لرؤية الصيغة الصحيحة.")
+        await status.edit_text(f"❌ لم أستطع قراءة الأسئلة بعد التحليل:\n{exc}\n\nاستخدم /help لرؤية الصيغة الصحيحة.")
     except Exception:
         logger.exception("Quiz conversion failed")
-        await update.message.reply_text("❌ حدث خطأ أثناء إنشاء الملف. تأكد من صيغة النص وحاول مرة أخرى.")
+        await status.edit_text("❌ حدث خطأ أثناء فهم المحتوى وإنشاء الملف. تأكد من صيغة النص وحاول مرة أخرى.")
 
 async def convert_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     doc=update.message.document; name=(doc.file_name or "").lower()
@@ -65,18 +82,24 @@ async def convert_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ الملف أكبر من الحد المسموح."); return
     source=os.path.join(config.TEMP_DIR, f"source_{uuid.uuid4().hex}")
     try:
+        status=await update.message.reply_text(f"⏳ جاري تجهيز الكويز... 10%\n[{progress_bar(10)}]\n\n📥 جاري تنزيل ملف Markdown...\n🔐 الملف يبقى داخل المعالجة المؤقتة فقط.")
         tg_file=await context.bot.get_file(doc.file_id); await tg_file.download_to_drive(source)
+        await update_progress(status, 25, '📄 تم تنزيل الملف\n🧠 جاري قراءة Markdown وفهم العناوين والفقرات...')
         with open(source, encoding="utf-8-sig", errors="replace") as fh:
             text=fh.read()
         if not text.strip():
             raise ValueError('الملف فارغ أو لا يحتوي على نص قابل للقراءة.')
         questions=await asyncio.to_thread(parse_provided_quiz, text)
-        await send_quiz(update, questions)
+        await update_progress(status, 65, f'🔎 تم العثور على {len(questions)} سؤالًا\n🧩 جاري تنظيم الخيارات والإجابات والتفسيرات...')
+        await send_quiz(update, questions, status=status)
+        await status.delete()
     except ValueError as exc:
-        await update.message.reply_text(f"❌ صيغة الملف غير مكتملة:\n{exc}")
+        if 'status' in locals(): await status.edit_text(f"❌ لم أستطع تنظيم ملف Markdown:\n{exc}")
+        else: await update.message.reply_text(f"❌ صيغة الملف غير مكتملة:\n{exc}")
     except Exception:
         logger.exception("Document conversion failed")
-        await update.message.reply_text("❌ تعذر قراءة الملف. تأكد أنه UTF-8 ويحتوي على أسئلة منظمة.")
+        if 'status' in locals(): await status.edit_text("❌ تعذر فهم ملف Markdown وإنشاء الكويز. تأكد من أن الملف يحتوي على أسئلة وخيارات.")
+        else: await update.message.reply_text("❌ تعذر قراءة الملف. تأكد أنه UTF-8 ويحتوي على أسئلة منظمة.")
     finally: remove(source)
 
 def main():
